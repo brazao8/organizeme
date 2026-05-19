@@ -119,6 +119,7 @@ function buildEntryFromText(text) {
 }
 
 function OrganizemeApp() {
+  const [showHome, setShowHome] = useState(true);
   const [entries, setEntries] = useState(starterEntries);
   const [message, setMessage] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -200,6 +201,38 @@ function OrganizemeApp() {
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => setIsListening(false);
     recognition.start();
+  }
+
+  if (showHome) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.glowOne} />
+        <div style={styles.glowTwo} />
+
+        <section style={styles.homeScreen}>
+          <div style={styles.appIconLarge}>♛</div>
+          <p style={styles.goldText}>Organizeme</p>
+          <h1 style={styles.homeTitle}>Seu dinheiro organizado por voz.</h1>
+          <p style={styles.homeSubtitle}>
+            Fale seus gastos como no WhatsApp. O app organiza, separa categorias e mostra onde seu dinheiro está indo.
+          </p>
+
+          <div style={styles.homePreviewCard}>
+            <p style={styles.homePreviewText}>“Gastei 120 reais no mercado”</p>
+            <div style={styles.chipsRow}>
+              <span style={styles.chipGold}>Despesas Domésticas</span>
+              <span style={styles.chipRed}>-R$ 120,00</span>
+            </div>
+          </div>
+
+          <button onClick={() => setShowHome(false)} style={styles.startButton}>
+            Entrar no Organizeme
+          </button>
+
+          <p style={styles.homeHint}>Toque uma vez e comece a organizar sua vida financeira.</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -525,6 +558,77 @@ const styles = {
     padding: 20,
   },
   assistantTitle: { margin: "8px 0", color: BRAND.cream, fontSize: 25 },
+  homeScreen: {
+    minHeight: "100vh",
+    maxWidth: 520,
+    margin: "0 auto",
+    padding: "42px 22px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    position: "relative",
+  },
+  appIconLarge: {
+    width: 118,
+    height: 118,
+    borderRadius: 34,
+    display: "grid",
+    placeItems: "center",
+    background: `linear-gradient(135deg, ${BRAND.lightGold}, ${BRAND.gold}, #9f7d39)`,
+    color: BRAND.deepGreen,
+    fontSize: 64,
+    boxShadow: "0 0 70px rgba(198,161,91,.34)",
+    marginBottom: 22,
+  },
+  homeTitle: {
+    margin: "10px 0 12px",
+    fontSize: "clamp(38px, 10vw, 58px)",
+    lineHeight: 1,
+    color: BRAND.cream,
+    letterSpacing: -1.5,
+  },
+  homeSubtitle: {
+    margin: 0,
+    color: BRAND.mutedGold,
+    fontSize: 16,
+    lineHeight: 1.6,
+    maxWidth: 460,
+  },
+  homePreviewCard: {
+    width: "100%",
+    marginTop: 28,
+    border: "1px solid rgba(240,221,154,.18)",
+    background: "rgba(24,61,53,.92)",
+    borderRadius: 28,
+    padding: 18,
+    boxShadow: "0 28px 80px rgba(0,0,0,.18)",
+    textAlign: "left",
+  },
+  homePreviewText: {
+    margin: 0,
+    fontSize: 17,
+    color: BRAND.cream,
+  },
+  startButton: {
+    width: "100%",
+    minHeight: 64,
+    marginTop: 24,
+    border: "1px solid rgba(240,221,154,.35)",
+    borderRadius: 24,
+    background: `linear-gradient(90deg, ${BRAND.lightGold}, ${BRAND.gold}, #9f7d39)`,
+    color: BRAND.deepGreen,
+    fontWeight: 900,
+    fontSize: 17,
+    cursor: "pointer",
+    boxShadow: "0 0 45px rgba(198,161,91,.25)",
+  },
+  homeHint: {
+    marginTop: 14,
+    color: BRAND.mutedGold,
+    fontSize: 13,
+  },
 };
 
 ReactDOM.createRoot(document.getElementById("root")).render(
