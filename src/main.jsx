@@ -19,53 +19,7 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-const starterEntries = [
-  {
-    id: 1,
-    text: "Gastei 50 reais com gasolina",
-    type: "expense",
-    description: "Gasolina",
-    category: "Transporte",
-    amount: 50,
-    date: "2026-05-16",
-  },
-  {
-    id: 2,
-    text: "Gastei 120 reais no mercado",
-    type: "expense",
-    description: "Mercado",
-    category: "Despesas Domésticas",
-    amount: 120,
-    date: "2026-05-16",
-  },
-  {
-    id: 3,
-    text: "Recebi 3000 reais de salário",
-    type: "income",
-    description: "Salário",
-    category: "Receitas",
-    amount: 3000,
-    date: "2026-05-15",
-  },
-  {
-    id: 4,
-    text: "Gastei 80 reais no cinema",
-    type: "expense",
-    description: "Cinema",
-    category: "Lazer",
-    amount: 80,
-    date: "2026-05-14",
-  },
-  {
-    id: 5,
-    text: "Gastei 220 reais com material para trabalho",
-    type: "expense",
-    description: "Material de trabalho",
-    category: "Profissional",
-    amount: 220,
-    date: "2026-05-13",
-  },
-];
+const starterEntries = [];
 
 function guessCategory(text) {
   const lower = text.toLowerCase();
@@ -123,6 +77,9 @@ function OrganizemeApp() {
   const [entries, setEntries] = useState(starterEntries);
   const [message, setMessage] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("Toque no botão e fale seu gasto.");
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Despesas Domésticas");
 
   const summary = useMemo(() => {
@@ -172,17 +129,42 @@ function OrganizemeApp() {
     setEntries((currentEntries) => [newEntry, ...currentEntries]);
     if (newEntry.type === "expense") setSelectedCategory(newEntry.category);
     setMessage("");
+    setVoiceStatus("Lançamento adicionado com sucesso.");
+  }
+
+  function deleteEntry(id) {
+    setEntries((currentEntries) => currentEntries.filter((entry) => entry.id !== id));
+  }
+
+  function startEditing(entry) {
+    setEditingId(entry.id);
+    setEditText(entry.text);
+  }
+
+  function saveEdit(id) {
+    const text = editText.trim();
+    const amount = extractAmount(text);
+
+    if (!text || amount <= 0) return;
+
+    const updatedEntry = buildEntryFromText(text);
+
+    setEntries((currentEntries) =>
+      currentEntries.map((entry) =>
+        entry.id === id ? { ...updatedEntry, id: entry.id, date: entry.date } : entry
+      )
+    );
+
+    setEditingId(null);
+    setEditText("");
+    if (updatedEntry.type === "expense") setSelectedCategory(updatedEntry.category);
   }
 
   function startVoiceRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setIsListening(true);
-      window.setTimeout(() => {
-        setIsListening(false);
-        addFromText("Gastei 75 reais no mercado");
-      }, 800);
+      setVoiceStatus("Seu navegador não liberou voz direta. No iPhone, toque no campo de texto e use o microfone do teclado.");
       return;
     }
 
@@ -192,13 +174,19 @@ function OrganizemeApp() {
     recognition.interimResults = false;
 
     setIsListening(true);
+    setVoiceStatus("Ouvindo... fale agora.");
 
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
+      setVoiceStatus(`Entendi: “${transcript}”`);
       addFromText(transcript);
     };
 
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = () => {
+      setIsListening(false);
+      setVoiceStatus("Não consegui ouvir. No iPhone, use o microfone do teclado dentro do campo de texto.");
+    };
+
     recognition.onend = () => setIsListening(false);
     recognition.start();
   }
@@ -276,16 +264,41 @@ function OrganizemeApp() {
 
               <div style={styles.chatBox}>
                 <div style={styles.messages}>
+                  {entries.length === 0 && (
+                    <div style={styles.emptyState}>
+                      Nenhum lançamento ainda. Digite ou fale: “gastei 50 reais no mercado”.
+                    </div>
+                  )}
                   {entries.slice(0, 6).map((entry) => (
                     <div key={entry.id} style={styles.messageBubble}>
-                      <p style={styles.messageText}>“{entry.text}”</p>
-                      <div style={styles.chipsRow}>
-                        <span style={styles.chipGold}>{entry.category}</span>
-                        <span style={entry.type === "income" ? styles.chipGreen : styles.chipRed}>
-                          {entry.type === "income" ? "+" : "-"}
-                          {money.format(entry.amount)}
-                        </span>
-                      </div>
+                      {editingId === entry.id ? (
+                        <div>
+                          <input
+                            value={editText}
+                            onChange={(event) => setEditText(event.target.value)}
+                            style={styles.editInput}
+                          />
+                          <div style={styles.actionRow}>
+                            <button onClick={() => saveEdit(entry.id)} style={styles.smallGoldButton}>Salvar</button>
+                            <button onClick={() => setEditingId(null)} style={styles.smallGhostButton}>Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p style={styles.messageText}>“{entry.text}”</p>
+                          <div style={styles.chipsRow}>
+                            <span style={styles.chipGold}>{entry.category}</span>
+                            <span style={entry.type === "income" ? styles.chipGreen : styles.chipRed}>
+                              {entry.type === "income" ? "+" : "-"}
+                              {money.format(entry.amount)}
+                            </span>
+                          </div>
+                          <div style={styles.actionRow}>
+                            <button onClick={() => startEditing(entry)} style={styles.smallGhostButton}>Editar</button>
+                            <button onClick={() => deleteEntry(entry.id)} style={styles.smallDangerButton}>Apagar</button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -308,6 +321,7 @@ function OrganizemeApp() {
                 <button onClick={startVoiceRecognition} style={styles.voiceButton}>
                   🎤 {isListening ? "Ouvindo..." : "Toque e fale"}
                 </button>
+                <p style={styles.voiceStatus}>{voiceStatus}</p>
               </div>
             </div>
           </section>
@@ -330,6 +344,11 @@ function OrganizemeApp() {
               <div style={styles.chartCard}>
                 <p style={styles.sectionTitle}>Gastos por categoria</p>
                 <div style={styles.barsWrap}>
+                  {summary.chart.length === 0 && (
+                    <div style={styles.emptyState}>
+                      O gráfico aparecerá depois do seu primeiro gasto.
+                    </div>
+                  )}
                   {summary.chart.map((item) => {
                     const percent = Math.max((item.amount / maxAmount) * 100, 8);
                     const barColor = percent > 75 ? BRAND.red : percent > 45 ? BRAND.gold : BRAND.success;
@@ -360,13 +379,22 @@ function OrganizemeApp() {
                 </div>
 
                 <div style={styles.detailsList}>
+                  {selectedEntries.length === 0 && (
+                    <div style={styles.emptyState}>
+                      Nenhum gasto nessa categoria ainda.
+                    </div>
+                  )}
                   {selectedEntries.map((entry) => (
                     <div key={entry.id} style={styles.detailItem}>
                       <div>
                         <p style={styles.detailTitle}>{entry.description}</p>
                         <p style={styles.smallText}>{new Date(entry.date).toLocaleDateString("pt-BR")}</p>
                       </div>
-                      <strong style={styles.redText}>-{money.format(entry.amount)}</strong>
+                      <div style={styles.detailActions}>
+                        <strong style={styles.redText}>-{money.format(entry.amount)}</strong>
+                        <button onClick={() => startEditing(entry)} style={styles.tinyButton}>Editar</button>
+                        <button onClick={() => deleteEntry(entry.id)} style={styles.tinyDangerButton}>Apagar</button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -548,6 +576,14 @@ const styles = {
   detailsHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 },
   totalPill: { borderRadius: 999, background: "rgba(198,161,91,.18)", color: BRAND.lightGold, padding: "7px 11px", fontSize: 13 },
   detailsList: { display: "grid", gap: 9 },
+  emptyState: {
+    border: "1px dashed rgba(240,221,154,.25)",
+    borderRadius: 20,
+    padding: 18,
+    color: BRAND.mutedGold,
+    textAlign: "center",
+    fontSize: 14,
+  },
   detailItem: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "rgba(44,103,88,.44)", borderRadius: 18, padding: 12 },
   detailTitle: { margin: 0, color: BRAND.cream, fontWeight: 700, fontSize: 14 },
   redText: { color: "#ffd1cd", whiteSpace: "nowrap" },
@@ -556,6 +592,63 @@ const styles = {
     borderRadius: 32,
     background: `linear-gradient(135deg, ${BRAND.softGreen}, ${BRAND.cardGreen})`,
     padding: 20,
+  },
+  voiceStatus: { margin: "10px 0 0", color: BRAND.mutedGold, fontSize: 12, textAlign: "center" },
+  editInput: {
+    width: "100%",
+    height: 44,
+    borderRadius: 16,
+    border: "1px solid rgba(240,221,154,.25)",
+    background: "rgba(18,53,46,.88)",
+    color: BRAND.cream,
+    padding: "0 12px",
+    outline: "none",
+    boxSizing: "border-box",
+  },
+  actionRow: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" },
+  smallGoldButton: {
+    border: 0,
+    borderRadius: 999,
+    background: BRAND.gold,
+    color: BRAND.deepGreen,
+    padding: "7px 12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  smallGhostButton: {
+    border: "1px solid rgba(240,221,154,.22)",
+    borderRadius: 999,
+    background: "rgba(18,53,46,.45)",
+    color: BRAND.cream,
+    padding: "7px 12px",
+    cursor: "pointer",
+  },
+  smallDangerButton: {
+    border: "1px solid rgba(185,85,76,.38)",
+    borderRadius: 999,
+    background: "rgba(185,85,76,.16)",
+    color: "#ffd1cd",
+    padding: "7px 12px",
+    cursor: "pointer",
+  },
+  detailActions: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" },
+  tinyButton: {
+    border: "1px solid rgba(240,221,154,.22)",
+    borderRadius: 999,
+    background: "rgba(18,53,46,.45)",
+    color: BRAND.cream,
+    padding: "5px 8px",
+    fontSize: 11,
+    cursor: "pointer",
+  },
+  tinyDangerButton: {
+    border: "1px solid rgba(185,85,76,.38)",
+    borderRadius: 999,
+    background: "rgba(185,85,76,.16)",
+    color: "#ffd1cd",
+    padding: "5px 8px",
+    fontSize: 11,
+    cursor: "pointer",
   },
   assistantTitle: { margin: "8px 0", color: BRAND.cream, fontSize: 25 },
   homeScreen: {
