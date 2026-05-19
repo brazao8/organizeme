@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 
 const BRAND = {
@@ -77,7 +77,8 @@ function OrganizemeApp() {
   const [entries, setEntries] = useState(starterEntries);
   const [message, setMessage] = useState("");
   const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState("Toque no botão e fale seu gasto.");
+  const [voiceStatus, setVoiceStatus] = useState("Segure o botão e fale seu gasto.");
+  const recognitionRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Despesas Domésticas");
@@ -161,20 +162,24 @@ function OrganizemeApp() {
   }
 
   function startVoiceRecognition() {
+    if (isListening) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setVoiceStatus("Seu navegador não liberou voz direta. No iPhone, toque no campo de texto e use o microfone do teclado.");
+      setVoiceStatus("Seu navegador não liberou voz direta. No iPhone, tente abrir no Safari e permitir o microfone.");
       return;
     }
 
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+
     recognition.lang = "pt-BR";
     recognition.continuous = false;
     recognition.interimResults = false;
 
     setIsListening(true);
-    setVoiceStatus("Ouvindo... fale agora.");
+    setVoiceStatus("Ouvindo... solte o botão para finalizar.");
 
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
@@ -184,43 +189,22 @@ function OrganizemeApp() {
 
     recognition.onerror = () => {
       setIsListening(false);
-      setVoiceStatus("Não consegui ouvir. No iPhone, use o microfone do teclado dentro do campo de texto.");
+      setVoiceStatus("Não consegui ouvir. Tente segurar o botão e falar mais perto do celular.");
     };
 
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
     recognition.start();
   }
 
-  if (showHome) {
-    return (
-      <main style={styles.page}>
-        <div style={styles.glowOne} />
-        <div style={styles.glowTwo} />
-
-        <section style={styles.homeScreen}>
-          <div style={styles.appIconLarge}>♛</div>
-          <p style={styles.goldText}>Organizeme</p>
-          <h1 style={styles.homeTitle}>Seu dinheiro organizado por voz.</h1>
-          <p style={styles.homeSubtitle}>
-            Fale seus gastos como no WhatsApp. O app organiza, separa categorias e mostra onde seu dinheiro está indo.
-          </p>
-
-          <div style={styles.homePreviewCard}>
-            <p style={styles.homePreviewText}>“Gastei 120 reais no mercado”</p>
-            <div style={styles.chipsRow}>
-              <span style={styles.chipGold}>Despesas Domésticas</span>
-              <span style={styles.chipRed}>-R$ 120,00</span>
-            </div>
-          </div>
-
-          <button onClick={() => setShowHome(false)} style={styles.startButton}>
-            Entrar no Organizeme
-          </button>
-
-          <p style={styles.homeHint}>Toque uma vez e comece a organizar sua vida financeira.</p>
-        </section>
-      </main>
-    );
+  function stopVoiceRecognition() {
+    if (recognitionRef.current) {
+      setVoiceStatus("Finalizando e organizando...");
+      recognitionRef.current.stop();
+    }
   }
 
   return (
@@ -318,8 +302,21 @@ function OrganizemeApp() {
                   </button>
                 </div>
 
-                <button onClick={startVoiceRecognition} style={styles.voiceButton}>
-                  🎤 {isListening ? "Ouvindo..." : "Toque e fale"}
+                <button
+                  onMouseDown={startVoiceRecognition}
+                  onMouseUp={stopVoiceRecognition}
+                  onMouseLeave={stopVoiceRecognition}
+                  onTouchStart={(event) => {
+                    event.preventDefault();
+                    startVoiceRecognition();
+                  }}
+                  onTouchEnd={(event) => {
+                    event.preventDefault();
+                    stopVoiceRecognition();
+                  }}
+                  style={isListening ? { ...styles.voiceButton, ...styles.voiceButtonActive } : styles.voiceButton}
+                >
+                  🎤 {isListening ? "Solte para finalizar" : "Segure para falar"}
                 </button>
                 <p style={styles.voiceStatus}>{voiceStatus}</p>
               </div>
@@ -560,6 +557,14 @@ const styles = {
     fontSize: 17,
     cursor: "pointer",
     boxShadow: "0 0 45px rgba(198,161,91,.25)",
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    touchAction: "none",
+  },
+  voiceButtonActive: {
+    transform: "scale(0.98)",
+    background: `linear-gradient(90deg, ${BRAND.gold}, ${BRAND.lightGold}, ${BRAND.gold})`,
+    boxShadow: "0 0 70px rgba(240,221,154,.45)",
   },
   insightGrid: { display: "grid", gap: 12 },
   insightCard: { border: "1px solid", borderRadius: 24, padding: 16, background: "rgba(44,103,88,.34)" },
