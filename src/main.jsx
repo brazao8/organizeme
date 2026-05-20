@@ -2,16 +2,17 @@ import React, { useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 
 const BRAND = {
-  bg: "#12352e",
-  card: "#183d35",
-  card2: "#1f4b40",
-  green: "#2c6758",
+  deepGreen: "#12352e",
+  mainGreen: "#1f4b40",
+  softGreen: "#2c6758",
+  cardGreen: "#183d35",
   gold: "#c6a15b",
-  gold2: "#f0dd9a",
+  lightGold: "#f0dd9a",
   cream: "#f8f1d5",
-  muted: "#d8c993",
-  red: "#ff6b6b",
+  mutedGold: "#d8c993",
+  red: "#b9554c",
   success: "#75c58a",
+  blue: "#7fb7a8",
 };
 
 const money = new Intl.NumberFormat("pt-BR", {
@@ -19,7 +20,7 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-const CATEGORIES = [
+const ALL_CATEGORIES = [
   "Despesa doméstica",
   "Alimentação",
   "Transporte",
@@ -31,34 +32,54 @@ const CATEGORIES = [
   "Outros",
 ];
 
+const categoryRules = [
+  {
+    name: "Saúde",
+    words: /farmácia|farmacia|remédio|remedio|consulta|médico|medico|exame|saúde|saude|dentista|hospital|clínica|clinica|plano de saúde|plano de saude/i,
+  },
+  {
+    name: "Transporte",
+    words: /gasolina|posto|combustível|combustivel|etanol|diesel|uber|99|ônibus|onibus|metrô|metro|transporte|estacionamento|pedágio|pedagio|oficina|carro|moto|pneu|mecânico|mecanico/i,
+  },
+  {
+    name: "Alimentação",
+    words: /mercado|supermercado|feira|padaria|açougue|acougue|restaurante|lanche|pizza|delivery|ifood|bebida|sorvete|hambúrguer|hamburguer|comida|almoço|almoco|jantar|café|cafe/i,
+  },
+  {
+    name: "Despesa doméstica",
+    words: /aluguel|luz|energia|água|agua|internet|gás|gas|casa|limpeza|produto de limpeza|detergente|sabão|sabao|manutenção|manutencao|condomínio|condominio|iptu|móveis|moveis|eletrodoméstico|eletrodomestico/i,
+  },
+  {
+    name: "Lazer",
+    words: /cinema|bar|passeio|viagem|lazer|show|shopping|parque|hobby|festa|hotel|praia|entretenimento/i,
+  },
+  {
+    name: "Profissional",
+    words: /trabalho|cliente|ferramenta|material|reunião|reuniao|empresa|profissional|escritório|escritorio|software|assinatura|equipamento/i,
+  },
+  {
+    name: "Educação",
+    words: /escola|faculdade|curso|livro|material escolar|educação|educacao|aula|mensalidade|professor/i,
+  },
+  {
+    name: "Pessoal",
+    words: /roupa|sapato|cabelo|barbeiro|salão|salao|beleza|presente|perfume|academia|cuidados pessoais/i,
+  },
+];
+
 function isIncome(text) {
-  return /recebi|ganhei|sal[aá]rio|pagamento|pix recebido|cliente pagou|vendi|entrada/i.test(text);
+  return /recebi|ganhei|salário|salario|pix recebido|pagamento|cliente pagou|vendi|entrada/i.test(text);
 }
 
-function getCategory(text) {
+function guessCategory(text) {
   if (isIncome(text)) return "Receita";
-
-  if (/farm[aá]cia|rem[eé]dio|consulta|m[eé]dico|exame|dentista|hospital|sa[uú]de/i.test(text)) return "Saúde";
-
-  if (/gasolina|posto|combust[ií]vel|uber|99|[oô]nibus|metr[oô]|carro|moto|estacionamento|ped[aá]gio/i.test(text)) return "Transporte";
-
-  if (/mercado|supermercado|feira|padaria|açougue|restaurante|lanche|pizza|ifood|delivery|comida|almo[cç]o|jantar/i.test(text)) return "Alimentação";
-
-  if (/aluguel|luz|energia|[aá]gua|internet|g[aá]s|limpeza|condom[ií]nio|iptu|casa|manuten[cç][aã]o/i.test(text)) return "Despesa doméstica";
-
-  if (/cinema|bar|passeio|viagem|show|shopping|festa|lazer/i.test(text)) return "Lazer";
-
-  if (/trabalho|cliente|empresa|reuni[aã]o|ferramenta|escrit[oó]rio|software|profissional/i.test(text)) return "Profissional";
-
-  if (/escola|faculdade|curso|livro|aula|educa[cç][aã]o|material escolar/i.test(text)) return "Educação";
-
-  if (/roupa|sapato|cabelo|barbeiro|sal[aã]o|beleza|presente|academia/i.test(text)) return "Pessoal";
-
-  return "Outros";
+  const found = categoryRules.find((category) => category.words.test(text));
+  return found ? found.name : "Outros";
 }
 
-function getAmount(text) {
-  const match = text.replace(",", ".").match(/(\d+(?:\.\d{1,2})?)/);
+function extractAmount(text) {
+  const normalized = text.toLowerCase().replace(",", ".");
+  const match = normalized.match(/(\d+(?:\.\d{1,2})?)/);
   return match ? Number(match[1]) : 0;
 }
 
@@ -68,293 +89,451 @@ function cleanDescription(text) {
     .replace(/[0-9.,]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/^(com|no|na|de)\s+/i, "");
+    .replace(/^com\s+/i, "")
+    .replace(/^no\s+/i, "")
+    .replace(/^na\s+/i, "")
+    .replace(/^de\s+/i, "");
 
-  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Lançamento";
+  if (!cleaned) return "Lançamento";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
-function App() {
+function buildEntryFromText(text) {
+  const amount = extractAmount(text);
+  const type = isIncome(text) ? "income" : "expense";
+
+  return {
+    id: Date.now(),
+    text,
+    type,
+    description: cleanDescription(text),
+    category: guessCategory(text),
+    amount,
+    date: new Date().toISOString().slice(0, 10),
+  };
+}
+
+function OrganizemeApp() {
+  const [showHome, setShowHome] = useState(true);
   const [entries, setEntries] = useState([]);
-  const [text, setText] = useState("");
-  const [status, setStatus] = useState("Segure o botão e fale seu gasto.");
-  const [listening, setListening] = useState(false);
-  const [selected, setSelected] = useState("Despesa doméstica");
+  const [message, setMessage] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("Segure o botão e fale seu gasto.");
+  const [selectedCategory, setSelectedCategory] = useState("Despesa doméstica");
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const recognitionRef = useRef(null);
 
   const summary = useMemo(() => {
-    const income = entries.filter(e => e.type === "income").reduce((s, e) => s + e.amount, 0);
-    const expense = entries.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
+    const income = entries.filter((e) => e.type === "income").reduce((s, e) => s + e.amount, 0);
+    const expense = entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amount, 0);
 
-    const categories = CATEGORIES.map(category => {
-      const items = entries.filter(e => e.type === "expense" && e.category === category);
-      return {
-        category,
-        amount: items.reduce((s, e) => s + e.amount, 0),
-        count: items.length,
-      };
+    const totals = {};
+    entries.filter((e) => e.type === "expense").forEach((e) => {
+      totals[e.category] = (totals[e.category] || 0) + e.amount;
     });
+
+    const categories = ALL_CATEGORIES.map((category) => ({
+      category,
+      amount: totals[category] || 0,
+      count: entries.filter((e) => e.type === "expense" && e.category === category).length,
+    }));
+
+    const used = categories.filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount);
 
     return {
       income,
       expense,
       balance: income - expense,
       categories,
+      biggest: used[0] || null,
+      smallest: used[used.length - 1] || null,
     };
   }, [entries]);
 
-  const selectedItems = entries.filter(e => e.type === "expense" && e.category === selected);
-  const selectedTotal = selectedItems.reduce((s, e) => s + e.amount, 0);
-  const max = Math.max(...summary.categories.map(c => c.amount), 1);
+  const categoryEntries = entries.filter(
+    (e) => e.type === "expense" && e.category === selectedCategory
+  );
 
-  function addEntry(raw) {
-    const phrase = raw.trim();
-    const amount = getAmount(phrase);
+  const activeCategoryTotal = categoryEntries.reduce((s, e) => s + e.amount, 0);
+  const maxCategoryAmount = Math.max(...summary.categories.map((c) => c.amount), 1);
 
-    if (!phrase || amount <= 0) {
-      setStatus("Não encontrei o valor. Exemplo: gastei 50 reais com gasolina.");
+  function addFromText(rawText) {
+    const text = rawText.trim();
+    const amount = extractAmount(text);
+
+    if (!text || amount <= 0) {
+      setVoiceStatus("Não encontrei um valor. Exemplo: gastei 50 reais no mercado.");
       return;
     }
 
-    const type = isIncome(phrase) ? "income" : "expense";
-    const category = getCategory(phrase);
+    const newEntry = buildEntryFromText(text);
+    setEntries((current) => [newEntry, ...current]);
 
-    const entry = {
-      id: Date.now(),
-      text: phrase,
-      type,
-      category,
-      amount,
-      description: cleanDescription(phrase),
-      date: new Date().toISOString(),
-    };
+    if (newEntry.type === "expense") {
+      setSelectedCategory(newEntry.category);
+    }
 
-    setEntries(prev => [entry, ...prev]);
-    setText("");
-    setStatus("Lançamento adicionado com sucesso.");
-
-    if (type === "expense") setSelected(category);
+    setMessage("");
+    setVoiceStatus("Lançamento adicionado com sucesso.");
   }
 
   function deleteEntry(id) {
-    setEntries(prev => prev.filter(e => e.id !== id));
+    setEntries((current) => current.filter((entry) => entry.id !== id));
+  }
+
+  function startEditing(entry) {
+    setEditingId(entry.id);
+    setEditText(entry.text);
   }
 
   function saveEdit(id) {
-    const amount = getAmount(editText);
-    if (!editText.trim() || amount <= 0) return;
+    const text = editText.trim();
+    const amount = extractAmount(text);
 
-    const type = isIncome(editText) ? "income" : "expense";
-    const category = getCategory(editText);
+    if (!text || amount <= 0) {
+      setVoiceStatus("Informe um valor para salvar.");
+      return;
+    }
 
-    setEntries(prev =>
-      prev.map(e =>
-        e.id === id
-          ? {
-              ...e,
-              text: editText,
-              type,
-              category,
-              amount,
-              description: cleanDescription(editText),
-            }
-          : e
+    const updated = buildEntryFromText(text);
+
+    setEntries((current) =>
+      current.map((entry) =>
+        entry.id === id ? { ...updated, id: entry.id, date: entry.date } : entry
       )
     );
 
     setEditingId(null);
     setEditText("");
-    if (type === "expense") setSelected(category);
+
+    if (updated.type === "expense") {
+      setSelectedCategory(updated.category);
+    }
   }
 
-  function startVoice() {
+  function startVoiceRecognition() {
+    if (isListening) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setStatus("Este navegador não liberou o microfone. Tente abrir no Safari/Chrome e permitir o microfone.");
+      setVoiceStatus("Seu navegador não liberou voz direta. Tente abrir no Safari/Chrome e permitir o microfone.");
       return;
     }
 
-    if (listening) return;
-
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
+
     recognition.lang = "pt-BR";
     recognition.continuous = false;
     recognition.interimResults = false;
 
-    recognition.onstart = () => {
-      setListening(true);
-      setStatus("Ouvindo... solte para finalizar.");
-    };
+    setIsListening(true);
+    setVoiceStatus("Ouvindo... solte o botão para finalizar.");
 
-    recognition.onresult = event => {
+    recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
-      setStatus(`Entendi: "${transcript}"`);
-      addEntry(transcript);
+      setVoiceStatus(`Entendi: “${transcript}”`);
+      addFromText(transcript);
     };
 
     recognition.onerror = () => {
-      setListening(false);
-      setStatus("Não consegui ouvir. Tente novamente.");
+      setIsListening(false);
+      setVoiceStatus("Não consegui ouvir. Tente novamente falando mais perto do celular.");
     };
 
     recognition.onend = () => {
-      setListening(false);
+      setIsListening(false);
       recognitionRef.current = null;
     };
 
     recognition.start();
   }
 
-  function stopVoice() {
+  function stopVoiceRecognition() {
     if (recognitionRef.current) {
-      setStatus("Finalizando e organizando...");
+      setVoiceStatus("Finalizando e organizando...");
       recognitionRef.current.stop();
     }
   }
 
+  if (showHome) {
+    return (
+      <main style={styles.page}>
+        <BackgroundGlow />
+        <section style={styles.homeScreen}>
+          <div style={styles.appIconLarge}>♛</div>
+          <p style={styles.goldText}>Organizeme</p>
+          <h1 style={styles.homeTitle}>Seu dinheiro organizado por voz.</h1>
+          <p style={styles.homeSubtitle}>
+            Fale seus gastos como no WhatsApp. O Organizeme organiza categorias, soma valores e mostra para onde seu dinheiro está indo.
+          </p>
+
+          <div style={styles.homePreviewCard}>
+            <p style={styles.homePreviewText}>“Gastei 120 reais no mercado”</p>
+            <div style={styles.chipsRow}>
+              <span style={styles.chipGold}>Alimentação</span>
+              <span style={styles.chipRed}>-R$ 120,00</span>
+            </div>
+          </div>
+
+          <button onClick={() => setShowHome(false)} style={styles.startButton}>
+            Entrar no Organizeme
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main style={styles.page}>
-      <div style={styles.shell}>
+      <BackgroundGlow />
+
+      <section style={styles.shell}>
         <header style={styles.header}>
-          <div style={styles.logo}>♛</div>
-          <div>
-            <h1 style={styles.title}>Organizeme</h1>
-            <p style={styles.subtitle}>Organização financeira inteligente</p>
+          <div style={styles.brandWrap}>
+            <div style={styles.logo}>♛</div>
+            <div>
+              <h1 style={styles.title}>Organizeme</h1>
+              <p style={styles.subtitle}>Organização financeira inteligente</p>
+            </div>
           </div>
+          <div style={styles.badge}>Modo teste</div>
         </header>
 
-        <section style={styles.dashboard}>
-          <p style={styles.gold}>Resumo do mês</p>
-          <p style={styles.label}>Total gasto no mês</p>
-          <h2 style={styles.big}>{money.format(summary.expense)}</h2>
+        <section style={styles.dashboardCard}>
+          <div style={styles.dashboardTopLine}>
+            <p style={styles.goldText}>Dashboard principal</p>
+            <button style={styles.smallPremiumButton} onClick={() => setShowHome(true)}>
+              Início
+            </button>
+          </div>
 
-          <div style={styles.metrics}>
-            <Box title="Recebido" value={money.format(summary.income)} color={BRAND.success} />
-            <Box title="Saldo" value={money.format(summary.balance)} color={summary.balance < 0 ? BRAND.red : BRAND.gold2} />
-            <Box title="Lançamentos" value={entries.length} color={BRAND.muted} />
+          <span style={styles.balanceLabel}>Total gasto no mês</span>
+          <h2 style={styles.mainNumber}>{money.format(summary.expense)}</h2>
+
+          <div style={styles.metricsGridThree}>
+            <MetricCard label="Recebido" value={money.format(summary.income)} tone="green" />
+            <MetricCard label="Saldo" value={money.format(summary.balance)} tone="gold" />
+            <MetricCard label="Registros" value={String(entries.length)} tone="blue" />
           </div>
         </section>
 
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Lançar por voz</h2>
-          <p style={styles.small}>Segure o botão, fale e solte para organizar.</p>
-
-          <div style={styles.inputRow}>
-            <input
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="Ex: gastei 50 reais com gasolina"
-              style={styles.input}
-              onKeyDown={e => e.key === "Enter" && addEntry(text)}
-            />
-            <button onClick={() => addEntry(text)} style={styles.send}>➤</button>
-          </div>
-
-          <button
-            onMouseDown={startVoice}
-            onMouseUp={stopVoice}
-            onMouseLeave={stopVoice}
-            onTouchStart={e => {
-              e.preventDefault();
-              startVoice();
-            }}
-            onTouchEnd={e => {
-              e.preventDefault();
-              stopVoice();
-            }}
-            style={listening ? { ...styles.voice, transform: "scale(.97)" } : styles.voice}
-          >
-            🎤 {listening ? "Solte para finalizar" : "Segure para falar"}
-          </button>
-
-          <p style={styles.status}>{status}</p>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Categorias</h2>
-          <p style={styles.small}>Toque em uma categoria para ver os detalhes.</p>
-
-          <div style={styles.categoryGrid}>
-            {summary.categories.map(cat => {
-              const pct = cat.amount > 0 ? Math.max((cat.amount / max) * 100, 8) : 0;
-              return (
-                <button
-                  key={cat.category}
-                  onClick={() => setSelected(cat.category)}
-                  style={selected === cat.category ? { ...styles.category, borderColor: BRAND.gold } : styles.category}
-                >
-                  <strong>{cat.category}</strong>
-                  <span style={{ color: cat.amount > 0 ? BRAND.red : BRAND.success }}>{money.format(cat.amount)}</span>
-                  <div style={styles.bar}>
-                    <div style={{ ...styles.fill, width: `${pct}%` }} />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>{selected}</h2>
-          <p style={styles.small}>Total da categoria: {money.format(selectedTotal)}</p>
-
-          {selectedItems.length === 0 && <div style={styles.empty}>Nenhum gasto nessa categoria ainda.</div>}
-
-          {selectedItems.map(item => (
-            <div key={item.id} style={styles.item}>
-              {editingId === item.id ? (
-                <div style={{ width: "100%" }}>
-                  <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
-                  <div style={styles.actions}>
-                    <button onClick={() => saveEdit(item.id)} style={styles.miniGold}>Salvar</button>
-                    <button onClick={() => setEditingId(null)} style={styles.mini}>Cancelar</button>
-                  </div>
+        <div style={styles.grid}>
+          <section style={styles.leftColumn}>
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div>
+                  <h3 style={styles.cardTitle}>Lançar por voz</h3>
+                  <p style={styles.smallText}>Segure, fale e solte para organizar.</p>
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <strong>{item.description}</strong>
-                    <p style={styles.small}>{new Date(item.date).toLocaleDateString("pt-BR")}</p>
-                    <p style={styles.small}>{item.text}</p>
+                <span style={styles.icon}>🎙️</span>
+              </div>
+
+              <div style={styles.chatBox}>
+                <div style={styles.inputRow}>
+                  <input
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addFromText(message);
+                    }}
+                    placeholder="Ex: gastei 50 reais com gasolina"
+                    style={styles.input}
+                  />
+                  <button onClick={() => addFromText(message)} style={styles.sendButton}>
+                    ➤
+                  </button>
+                </div>
+
+                <button
+                  onMouseDown={startVoiceRecognition}
+                  onMouseUp={stopVoiceRecognition}
+                  onMouseLeave={stopVoiceRecognition}
+                  onTouchStart={(event) => {
+                    event.preventDefault();
+                    startVoiceRecognition();
+                  }}
+                  onTouchEnd={(event) => {
+                    event.preventDefault();
+                    stopVoiceRecognition();
+                  }}
+                  style={isListening ? { ...styles.voiceButton, ...styles.voiceButtonActive } : styles.voiceButton}
+                >
+                  🎤 {isListening ? "Solte para finalizar" : "Segure para falar"}
+                </button>
+
+                <p style={styles.voiceStatus}>{voiceStatus}</p>
+              </div>
+            </div>
+
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div>
+                  <h3 style={styles.cardTitle}>Histórico</h3>
+                  <p style={styles.smallText}>Tudo fica editável.</p>
+                </div>
+                <span style={styles.icon}>🧾</span>
+              </div>
+
+              <div style={styles.messages}>
+                {entries.length === 0 && (
+                  <div style={styles.emptyState}>
+                    Nenhum lançamento ainda. Experimente falar: “gastei 50 reais no mercado”.
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <strong style={{ color: BRAND.red }}>-{money.format(item.amount)}</strong>
-                    <div style={styles.actions}>
-                      <button onClick={() => { setEditingId(item.id); setEditText(item.text); }} style={styles.mini}>Editar</button>
-                      <button onClick={() => deleteEntry(item.id)} style={styles.miniRed}>Apagar</button>
+                )}
+
+                {entries.map((entry) => (
+                  <EntryCard
+                    key={entry.id}
+                    entry={entry}
+                    editingId={editingId}
+                    editText={editText}
+                    setEditText={setEditText}
+                    saveEdit={saveEdit}
+                    cancelEdit={() => setEditingId(null)}
+                    startEditing={startEditing}
+                    deleteEntry={deleteEntry}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section style={styles.rightColumn}>
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div>
+                  <h3 style={styles.cardTitle}>Categorias</h3>
+                  <p style={styles.smallText}>Clique para ver os detalhes.</p>
+                </div>
+                <span style={styles.icon}>📊</span>
+              </div>
+
+              <div style={styles.categoryList}>
+                {summary.categories.map((item) => {
+                  const percent = item.amount > 0 ? Math.max((item.amount / maxCategoryAmount) * 100, 7) : 0;
+                  const isActive = selectedCategory === item.category;
+                  const barColor = percent > 75 ? BRAND.red : percent > 45 ? BRAND.gold : BRAND.success;
+
+                  return (
+                    <button
+                      key={item.category}
+                      onClick={() => setSelectedCategory(item.category)}
+                      style={isActive ? { ...styles.categoryButton, ...styles.categoryButtonActive } : styles.categoryButton}
+                    >
+                      <div style={styles.categoryTopLine}>
+                        <strong>{item.category}</strong>
+                        <span>{money.format(item.amount)}</span>
+                      </div>
+                      <div style={styles.barTrack}>
+                        <div style={{ ...styles.barFill, width: `${percent}%`, background: barColor }} />
+                      </div>
+                      <small style={styles.categorySmall}>{item.count} lançamento(s)</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div>
+                  <h3 style={styles.cardTitle}>{selectedCategory}</h3>
+                  <p style={styles.smallText}>Data, descrição e valor.</p>
+                </div>
+                <span style={styles.totalPill}>{money.format(activeCategoryTotal)}</span>
+              </div>
+
+              <div style={styles.detailsList}>
+                {categoryEntries.length === 0 && (
+                  <div style={styles.emptyState}>Nenhum gasto nessa categoria ainda.</div>
+                )}
+
+                {categoryEntries.map((entry) => (
+                  <div key={entry.id} style={styles.detailItem}>
+                    <div>
+                      <p style={styles.detailTitle}>{entry.description}</p>
+                      <p style={styles.smallText}>{new Date(entry.date).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                    <div style={styles.detailActions}>
+                      <strong style={styles.redText}>-{money.format(entry.amount)}</strong>
+                      <button onClick={() => startEditing(entry)} style={styles.tinyButton}>Editar</button>
+                      <button onClick={() => deleteEntry(entry.id)} style={styles.tinyDangerButton}>Apagar</button>
                     </div>
                   </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
-          ))}
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Histórico</h2>
-          {entries.length === 0 && <div style={styles.empty}>Nenhum lançamento ainda.</div>}
-          {entries.map(item => (
-            <div key={item.id} style={styles.history}>
-              <span>{item.type === "income" ? "Entrada" : item.category}</span>
-              <strong style={{ color: item.type === "income" ? BRAND.success : BRAND.red }}>
-                {item.type === "income" ? "+" : "-"}{money.format(item.amount)}
-              </strong>
-            </div>
-          ))}
-        </section>
-      </div>
+          </section>
+        </div>
+      </section>
     </main>
   );
 }
 
-function Box({ title, value, color }) {
+function BackgroundGlow() {
   return (
-    <div style={styles.box}>
-      <p style={styles.small}>{title}</p>
-      <strong style={{ color, fontSize: 18 }}>{value}</strong>
+    <>
+      <div style={styles.glowOne} />
+      <div style={styles.glowTwo} />
+    </>
+  );
+}
+
+function MetricCard({ label, value, tone }) {
+  const color = tone === "green" ? BRAND.success : tone === "blue" ? BRAND.blue : BRAND.lightGold;
+
+  return (
+    <div style={styles.metricCard}>
+      <p style={styles.smallText}>{label}</p>
+      <strong style={{ color, fontSize: 18, display: "block", whiteSpace: "nowrap" }}>{value}</strong>
+    </div>
+  );
+}
+
+function EntryCard({
+  entry,
+  editingId,
+  editText,
+  setEditText,
+  saveEdit,
+  cancelEdit,
+  startEditing,
+  deleteEntry,
+}) {
+  const editing = editingId === entry.id;
+
+  return (
+    <div style={styles.messageBubble}>
+      {editing ? (
+        <div>
+          <input
+            value={editText}
+            onChange={(event) => setEditText(event.target.value)}
+            style={styles.editInput}
+          />
+          <div style={styles.actionRow}>
+            <button onClick={() => saveEdit(entry.id)} style={styles.smallGoldButton}>Salvar</button>
+            <button onClick={cancelEdit} style={styles.smallGhostButton}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p style={styles.messageText}>“{entry.text}”</p>
+          <div style={styles.chipsRow}>
+            <span style={styles.chipGold}>{entry.category}</span>
+            <span style={entry.type === "income" ? styles.chipGreen : styles.chipRed}>
+              {entry.type === "income" ? "+" : "-"}{money.format(entry.amount)}
+            </span>
+          </div>
+          <div style={styles.actionRow}>
+            <button onClick={() => startEditing(entry)} style={styles.smallGhostButton}>Editar</button>
+            <button onClick={() => deleteEntry(entry.id)} style={styles.smallDangerButton}>Apagar</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -362,183 +541,498 @@ function Box({ title, value, color }) {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: BRAND.bg,
+    background: BRAND.deepGreen,
     color: BRAND.cream,
     fontFamily: "Arial, sans-serif",
+    position: "relative",
+    overflow: "hidden",
+  },
+  glowOne: {
+    position: "fixed",
+    width: 420,
+    height: 420,
+    borderRadius: "50%",
+    background: "rgba(44,103,88,.45)",
+    filter: "blur(90px)",
+    top: -120,
+    left: "35%",
+  },
+  glowTwo: {
+    position: "fixed",
+    width: 380,
+    height: 380,
+    borderRadius: "50%",
+    background: "rgba(198,161,91,.16)",
+    filter: "blur(90px)",
+    bottom: -120,
+    right: -80,
   },
   shell: {
-    maxWidth: 760,
+    position: "relative",
+    maxWidth: 1160,
     margin: "0 auto",
     padding: 14,
+    boxSizing: "border-box",
   },
   header: {
     display: "flex",
-    gap: 12,
     alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
+    gap: 12,
+  },
+  brandWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
   },
   logo: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    minWidth: 52,
+    borderRadius: 18,
     display: "grid",
     placeItems: "center",
-    background: `linear-gradient(135deg, ${BRAND.gold2}, ${BRAND.gold})`,
-    color: BRAND.bg,
-    fontSize: 28,
+    background: `linear-gradient(135deg, ${BRAND.lightGold}, ${BRAND.gold})`,
+    color: BRAND.deepGreen,
+    fontSize: 27,
+    boxShadow: "0 0 40px rgba(198,161,91,.25)",
   },
-  title: { margin: 0, fontSize: 30 },
-  subtitle: { margin: 0, color: BRAND.muted },
-  dashboard: {
+  title: {
+    margin: 0,
+    fontSize: 24,
+    letterSpacing: 1,
+  },
+  subtitle: {
+    margin: "3px 0 0",
+    color: BRAND.mutedGold,
+    fontSize: 12,
+  },
+  badge: {
     border: "1px solid rgba(240,221,154,.25)",
+    background: "rgba(24,61,53,.85)",
+    borderRadius: 999,
+    padding: "8px 11px",
+    color: BRAND.cream,
+    fontSize: 12,
+    whiteSpace: "nowrap",
+  },
+  dashboardCard: {
+    border: "1px solid rgba(240,221,154,.22)",
     borderRadius: 28,
-    padding: 18,
-    background: `linear-gradient(135deg, ${BRAND.green}, ${BRAND.card})`,
-    marginBottom: 14,
+    background: `linear-gradient(135deg, ${BRAND.softGreen}, ${BRAND.mainGreen}, ${BRAND.cardGreen})`,
+    padding: 16,
+    boxShadow: "0 28px 80px rgba(0,0,0,.18)",
+    marginBottom: 16,
     overflow: "hidden",
   },
-  gold: { color: BRAND.gold2, margin: 0 },
-  label: { color: BRAND.muted, marginTop: 18 },
-  big: {
-    fontSize: "clamp(44px, 14vw, 68px)",
-    margin: "4px 0 16px",
-    lineHeight: 1,
+  dashboardTopLine: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
   },
-  metrics: {
+  goldText: {
+    color: BRAND.lightGold,
+    margin: 0,
+    fontSize: 14,
+  },
+  balanceLabel: {
+    color: BRAND.mutedGold,
+    fontSize: 13,
+  },
+  mainNumber: {
+    fontSize: "clamp(40px, 13vw, 62px)",
+    lineHeight: 1,
+    margin: "8px 0 0",
+    color: BRAND.cream,
+    letterSpacing: -1.5,
+  },
+  smallPremiumButton: {
+    border: "1px solid rgba(240,221,154,.3)",
+    background: "rgba(18,53,46,.38)",
+    color: BRAND.lightGold,
+    borderRadius: 999,
+    padding: "8px 12px",
+    cursor: "pointer",
+  },
+  metricsGridThree: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 8,
+    marginTop: 18,
   },
-  box: {
-    background: "rgba(18,53,46,.55)",
-    border: "1px solid rgba(240,221,154,.15)",
+  metricCard: {
+    border: "1px solid rgba(240,221,154,.17)",
+    background: "rgba(24,61,53,.72)",
     borderRadius: 18,
     padding: 10,
     minWidth: 0,
     overflow: "hidden",
   },
-  card: {
-    background: "rgba(24,61,53,.96)",
-    border: "1px solid rgba(240,221,154,.18)",
-    borderRadius: 26,
-    padding: 16,
-    marginBottom: 14,
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: 16,
   },
-  cardTitle: { margin: "0 0 4px", fontSize: 24 },
-  small: { margin: 0, color: BRAND.muted, fontSize: 13 },
-  inputRow: { display: "flex", gap: 8, marginTop: 14 },
+  leftColumn: {
+    display: "grid",
+    gap: 16,
+    alignContent: "start",
+  },
+  rightColumn: {
+    display: "grid",
+    gap: 16,
+    alignContent: "start",
+  },
+  card: {
+    border: "1px solid rgba(240,221,154,.17)",
+    background: "rgba(24,61,53,.96)",
+    borderRadius: 28,
+    padding: 16,
+    boxShadow: "0 28px 80px rgba(0,0,0,.16)",
+  },
+  cardHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 16,
+  },
+  cardTitle: {
+    margin: 0,
+    color: BRAND.cream,
+    fontSize: 19,
+  },
+  icon: {
+    fontSize: 22,
+  },
+  smallText: {
+    margin: 0,
+    color: BRAND.mutedGold,
+    fontSize: 13,
+    lineHeight: 1.45,
+  },
+  chatBox: {
+    border: "1px solid rgba(240,221,154,.16)",
+    background: "rgba(31,75,64,.86)",
+    borderRadius: 24,
+    padding: 12,
+  },
+  inputRow: {
+    display: "flex",
+    gap: 8,
+  },
   input: {
     flex: 1,
-    minWidth: 0,
     height: 48,
     borderRadius: 18,
-    border: "1px solid rgba(240,221,154,.25)",
-    background: "rgba(18,53,46,.8)",
+    border: "1px solid rgba(240,221,154,.22)",
+    background: "rgba(18,53,46,.82)",
     color: BRAND.cream,
-    padding: "0 12px",
+    padding: "0 14px",
+    outline: "none",
     boxSizing: "border-box",
+    minWidth: 0,
   },
-  send: {
+  sendButton: {
     width: 52,
-    border: 0,
+    minWidth: 52,
+    border: "none",
     borderRadius: 18,
     background: BRAND.gold,
-    color: BRAND.bg,
+    color: BRAND.deepGreen,
     fontWeight: 900,
+    cursor: "pointer",
   },
-  voice: {
-    width: "100%",
+  voiceButton: {
     marginTop: 12,
+    width: "100%",
     minHeight: 64,
-    border: 0,
+    border: "1px solid rgba(240,221,154,.33)",
     borderRadius: 24,
-    background: `linear-gradient(90deg, ${BRAND.gold2}, ${BRAND.gold})`,
-    color: BRAND.bg,
+    background: `linear-gradient(90deg, ${BRAND.lightGold}, ${BRAND.gold}, #9f7d39)`,
+    color: BRAND.deepGreen,
     fontWeight: 900,
-    fontSize: 18,
+    fontSize: 17,
+    cursor: "pointer",
+    boxShadow: "0 0 45px rgba(198,161,91,.25)",
+    userSelect: "none",
+    WebkitUserSelect: "none",
     touchAction: "none",
   },
-  status: { textAlign: "center", color: BRAND.muted, fontSize: 13 },
-  categoryGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
-    gap: 10,
-    marginTop: 14,
+  voiceButtonActive: {
+    transform: "scale(0.98)",
+    background: `linear-gradient(90deg, ${BRAND.gold}, ${BRAND.lightGold}, ${BRAND.gold})`,
+    boxShadow: "0 0 70px rgba(240,221,154,.45)",
   },
-  category: {
-    textAlign: "left",
-    color: BRAND.cream,
-    background: "rgba(31,75,64,.65)",
-    border: "1px solid rgba(240,221,154,.16)",
-    borderRadius: 18,
-    padding: 12,
-  },
-  bar: {
-    height: 8,
-    background: "rgba(18,53,46,.8)",
-    borderRadius: 99,
-    overflow: "hidden",
-    marginTop: 8,
-  },
-  fill: {
-    height: "100%",
-    background: BRAND.gold,
-  },
-  empty: {
-    border: "1px dashed rgba(240,221,154,.28)",
-    borderRadius: 18,
-    padding: 14,
-    color: BRAND.muted,
-    marginTop: 12,
+  voiceStatus: {
+    margin: "10px 0 0",
+    color: BRAND.mutedGold,
+    fontSize: 12,
     textAlign: "center",
   },
-  item: {
-    display: "flex",
-    justifyContent: "space-between",
+  messages: {
+    display: "grid",
     gap: 10,
-    background: "rgba(44,103,88,.45)",
-    borderRadius: 18,
-    padding: 12,
-    marginTop: 10,
+    maxHeight: 460,
+    overflow: "auto",
   },
-  actions: {
+  emptyState: {
+    border: "1px dashed rgba(240,221,154,.25)",
+    borderRadius: 20,
+    padding: 18,
+    color: BRAND.mutedGold,
+    textAlign: "center",
+    fontSize: 14,
+  },
+  messageBubble: {
+    background: "rgba(44,103,88,.83)",
+    borderRadius: 20,
+    padding: 13,
+  },
+  messageText: {
+    margin: 0,
+    fontSize: 14,
+  },
+  chipsRow: {
     display: "flex",
-    gap: 6,
-    marginTop: 8,
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 9,
+  },
+  chipGold: {
+    borderRadius: 999,
+    background: "rgba(24,61,53,.88)",
+    color: BRAND.lightGold,
+    padding: "5px 8px",
+    fontSize: 12,
+  },
+  chipGreen: {
+    borderRadius: 999,
+    background: "rgba(117,197,138,.18)",
+    color: "#b9f5c6",
+    padding: "5px 8px",
+    fontSize: 12,
+  },
+  chipRed: {
+    borderRadius: 999,
+    background: "rgba(185,85,76,.18)",
+    color: "#ffd1cd",
+    padding: "5px 8px",
+    fontSize: 12,
+  },
+  actionRow: {
+    display: "flex",
+    gap: 8,
+    marginTop: 10,
     flexWrap: "wrap",
   },
-  mini: {
-    border: "1px solid rgba(240,221,154,.2)",
-    background: "transparent",
+  editInput: {
+    width: "100%",
+    height: 44,
+    borderRadius: 16,
+    border: "1px solid rgba(240,221,154,.25)",
+    background: "rgba(18,53,46,.88)",
     color: BRAND.cream,
-    borderRadius: 99,
-    padding: "5px 8px",
+    padding: "0 12px",
+    outline: "none",
+    boxSizing: "border-box",
   },
-  miniGold: {
+  smallGoldButton: {
     border: 0,
+    borderRadius: 999,
     background: BRAND.gold,
-    color: BRAND.bg,
-    borderRadius: 99,
-    padding: "6px 10px",
+    color: BRAND.deepGreen,
+    padding: "7px 12px",
     fontWeight: 800,
+    cursor: "pointer",
   },
-  miniRed: {
-    border: "1px solid rgba(255,107,107,.4)",
-    background: "rgba(255,107,107,.12)",
+  smallGhostButton: {
+    border: "1px solid rgba(240,221,154,.22)",
+    borderRadius: 999,
+    background: "rgba(18,53,46,.45)",
+    color: BRAND.cream,
+    padding: "7px 12px",
+    cursor: "pointer",
+  },
+  smallDangerButton: {
+    border: "1px solid rgba(185,85,76,.38)",
+    borderRadius: 999,
+    background: "rgba(185,85,76,.16)",
     color: "#ffd1cd",
-    borderRadius: 99,
-    padding: "5px 8px",
+    padding: "7px 12px",
+    cursor: "pointer",
   },
-  history: {
+  categoryList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+    gap: 10,
+    marginTop: 16,
+  },
+  categoryButton: {
+    border: "1px solid rgba(240,221,154,.16)",
+    background: "rgba(31,75,64,.72)",
+    color: BRAND.cream,
+    borderRadius: 20,
+    padding: 12,
+    cursor: "pointer",
+    textAlign: "left",
+    minWidth: 0,
+  },
+  categoryButtonActive: {
+    border: "1px solid rgba(240,221,154,.45)",
+    background: "rgba(198,161,91,.16)",
+  },
+  categoryTopLine: {
+    display: "grid",
+    gap: 6,
+    alignItems: "center",
+    marginBottom: 9,
+  },
+  categorySmall: {
+    color: BRAND.mutedGold,
+    display: "block",
+    marginTop: 8,
+  },
+  barTrack: {
+    height: 12,
+    background: "rgba(18,53,46,.86)",
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  detailsList: {
+    display: "grid",
+    gap: 9,
+  },
+  detailItem: {
     display: "flex",
+    alignItems: "center",
     justifyContent: "space-between",
-    borderBottom: "1px solid rgba(240,221,154,.12)",
-    padding: "10px 0",
+    gap: 12,
+    background: "rgba(44,103,88,.44)",
+    borderRadius: 18,
+    padding: 12,
+  },
+  detailTitle: {
+    margin: 0,
+    color: BRAND.cream,
+    fontWeight: 700,
+    fontSize: 14,
+  },
+  redText: {
+    color: "#ffd1cd",
+    whiteSpace: "nowrap",
+  },
+  detailActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+  tinyButton: {
+    border: "1px solid rgba(240,221,154,.22)",
+    borderRadius: 999,
+    background: "rgba(18,53,46,.45)",
+    color: BRAND.cream,
+    padding: "5px 8px",
+    fontSize: 11,
+    cursor: "pointer",
+  },
+  tinyDangerButton: {
+    border: "1px solid rgba(185,85,76,.38)",
+    borderRadius: 999,
+    background: "rgba(185,85,76,.16)",
+    color: "#ffd1cd",
+    padding: "5px 8px",
+    fontSize: 11,
+    cursor: "pointer",
+  },
+  totalPill: {
+    borderRadius: 999,
+    background: "rgba(198,161,91,.18)",
+    color: BRAND.lightGold,
+    padding: "7px 11px",
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  },
+  homeScreen: {
+    minHeight: "100vh",
+    maxWidth: 520,
+    margin: "0 auto",
+    padding: "42px 22px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    position: "relative",
+  },
+  appIconLarge: {
+    width: 118,
+    height: 118,
+    borderRadius: 34,
+    display: "grid",
+    placeItems: "center",
+    background: `linear-gradient(135deg, ${BRAND.lightGold}, ${BRAND.gold}, #9f7d39)`,
+    color: BRAND.deepGreen,
+    fontSize: 64,
+    boxShadow: "0 0 70px rgba(198,161,91,.34)",
+    marginBottom: 22,
+  },
+  homeTitle: {
+    margin: "10px 0 12px",
+    fontSize: "clamp(38px, 10vw, 58px)",
+    lineHeight: 1,
+    color: BRAND.cream,
+    letterSpacing: -1.5,
+  },
+  homeSubtitle: {
+    margin: 0,
+    color: BRAND.mutedGold,
+    fontSize: 16,
+    lineHeight: 1.6,
+    maxWidth: 460,
+  },
+  homePreviewCard: {
+    width: "100%",
+    marginTop: 28,
+    border: "1px solid rgba(240,221,154,.18)",
+    background: "rgba(24,61,53,.92)",
+    borderRadius: 28,
+    padding: 18,
+    boxShadow: "0 28px 80px rgba(0,0,0,.18)",
+    textAlign: "left",
+  },
+  homePreviewText: {
+    margin: 0,
+    fontSize: 17,
+    color: BRAND.cream,
+  },
+  startButton: {
+    width: "100%",
+    minHeight: 64,
+    marginTop: 24,
+    border: "1px solid rgba(240,221,154,.35)",
+    borderRadius: 24,
+    background: `linear-gradient(90deg, ${BRAND.lightGold}, ${BRAND.gold}, #9f7d39)`,
+    color: BRAND.deepGreen,
+    fontWeight: 900,
+    fontSize: 17,
+    cursor: "pointer",
+    boxShadow: "0 0 45px rgba(198,161,91,.25)",
   },
 };
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <OrganizemeApp />
   </React.StrictMode>
 );
