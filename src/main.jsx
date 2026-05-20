@@ -22,28 +22,36 @@ const money = new Intl.NumberFormat("pt-BR", {
 
 const categoryRules = [
   {
-    name: "Despesa doméstica",
-    words: /mercado|supermercado|aluguel|luz|energia|água|agua|internet|gás|gas|casa|feira|limpeza|padaria|açougue|acougue/i,
+    name: "Saúde",
+    words: /farmácia|farmacia|remédio|remedio|consulta|médico|medico|exame|saúde|saude|dentista|hospital|clínica|clinica|plano de saúde|plano de saude/i,
   },
   {
     name: "Transporte",
-    words: /gasolina|posto|uber|99|ônibus|onibus|metrô|metro|transporte|estacionamento|pedágio|pedagio|oficina|carro/i,
+    words: /gasolina|posto|combustível|combustivel|etanol|diesel|uber|99|ônibus|onibus|metrô|metro|transporte|estacionamento|pedágio|pedagio|oficina|carro|moto|pneu|mecânico|mecanico/i,
+  },
+  {
+    name: "Alimentação",
+    words: /mercado|supermercado|feira|padaria|açougue|acougue|restaurante|lanche|pizza|delivery|ifood|bebida|sorvete|hambúrguer|hamburguer|comida|almoço|almoco|jantar|café|cafe/i,
+  },
+  {
+    name: "Despesa doméstica",
+    words: /aluguel|luz|energia|água|agua|internet|gás|gas|casa|limpeza|produto de limpeza|detergente|sabão|sabao|manutenção|manutencao|condomínio|condominio|iptu|móveis|moveis|eletrodoméstico|eletrodomestico/i,
   },
   {
     name: "Lazer",
-    words: /cinema|restaurante|bar|passeio|viagem|lazer|show|pizza|lanche|sorvete|shopping/i,
+    words: /cinema|bar|passeio|viagem|lazer|show|shopping|parque|hobby|festa|hotel|praia|entretenimento/i,
   },
   {
     name: "Profissional",
-    words: /trabalho|cliente|ferramenta|material|reunião|reuniao|empresa|profissional|escritório|escritorio/i,
-  },
-  {
-    name: "Saúde",
-    words: /remédio|remedio|consulta|médico|medico|exame|farmácia|farmacia|saúde|saude|dentista/i,
+    words: /trabalho|cliente|ferramenta|material|reunião|reuniao|empresa|profissional|escritório|escritorio|software|assinatura|equipamento/i,
   },
   {
     name: "Educação",
-    words: /escola|faculdade|curso|livro|material escolar|educação|educacao|aula/i,
+    words: /escola|faculdade|curso|livro|material escolar|educação|educacao|aula|mensalidade|professor/i,
+  },
+  {
+    name: "Pessoal",
+    words: /roupa|sapato|cabelo|barbeiro|salão|salao|beleza|presente|perfume|academia|cuidados pessoais/i,
   },
 ];
 
@@ -146,6 +154,23 @@ function OrganizemeApp() {
       smallest: categories[categories.length - 1] || null,
     };
   }, [entries]);
+
+  const allCategoryNames = [
+    "Despesa doméstica",
+    "Alimentação",
+    "Transporte",
+    "Saúde",
+    "Educação",
+    "Lazer",
+    "Profissional",
+    "Pessoal",
+    "Outros",
+  ];
+
+  const categoryDashboard = allCategoryNames.map((category) => {
+    const found = summary.categories.find((item) => item.category === category);
+    return found || { category, amount: 0, count: 0 };
+  });
 
   const activeCategory = selectedCategory || summary.categories[0]?.category || null;
   const categoryEntries = entries.filter(
@@ -420,12 +445,12 @@ function OrganizemeApp() {
               </div>
 
               <div style={styles.categoryList}>
-                {summary.categories.length === 0 && (
-                  <div style={styles.emptyState}>As categorias aparecerão depois do primeiro gasto.</div>
+                {entries.length === 0 && (
+                  <div style={styles.emptyState}>As categorias aparecerão aqui. Toque em uma categoria para ver os detalhes.</div>
                 )}
 
-                {summary.categories.map((item) => {
-                  const percent = Math.max((item.amount / maxCategoryAmount) * 100, 7);
+                {categoryDashboard.map((item) => {
+                  const percent = item.amount > 0 ? Math.max((item.amount / maxCategoryAmount) * 100, 7) : 0;
                   const isActive = activeCategory === item.category;
                   const barColor = percent > 75 ? BRAND.red : percent > 45 ? BRAND.gold : BRAND.success;
 
@@ -603,7 +628,7 @@ const styles = {
     bottom: -120,
     right: -80,
   },
-  shell: { position: "relative", maxWidth: 1160, margin: "0 auto", padding: 18 },
+  shell: { position: "relative", maxWidth: 1160, margin: "0 auto", padding: "14px", boxSizing: "border-box" }
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 12 },
   brandWrap: { display: "flex", alignItems: "center", gap: 12 },
   logo: {
@@ -629,15 +654,16 @@ const styles = {
   },
   dashboardCard: {
     border: "1px solid rgba(240,221,154,.22)",
-    borderRadius: 32,
+    borderRadius: 28,
     background: `linear-gradient(135deg, ${BRAND.softGreen}, ${BRAND.mainGreen}, ${BRAND.cardGreen})`,
-    padding: 22,
+    padding: 18,
     boxShadow: "0 28px 80px rgba(0,0,0,.18)",
-    marginBottom: 20,
+    marginBottom: 18,
+    overflow: "hidden",
   },
   balanceRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginTop: 12 },
   balanceLabel: { color: BRAND.mutedGold, fontSize: 13 },
-  mainNumber: { fontSize: "clamp(42px, 8vw, 70px)", lineHeight: 1, margin: "8px 0 0", color: BRAND.cream },
+  mainNumber: { fontSize: "clamp(42px, 13vw, 64px)", lineHeight: 1, margin: "8px 0 0", color: BRAND.cream, letterSpacing: -1.5 }
   smallPremiumButton: {
     border: "1px solid rgba(240,221,154,.3)",
     background: "rgba(18,53,46,.38)",
@@ -646,8 +672,8 @@ const styles = {
     padding: "9px 13px",
     cursor: "pointer",
   },
-  metricsGridThree: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 22 },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 },
+  metricsGridThree: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 20 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }
   leftColumn: { display: "grid", gap: 20, alignContent: "start" },
   rightColumn: { display: "grid", gap: 20, alignContent: "start" },
   card: {
@@ -665,8 +691,10 @@ const styles = {
   metricCard: {
     border: "1px solid rgba(240,221,154,.17)",
     background: "rgba(24,61,53,.72)",
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 20,
+    padding: 12,
+    minWidth: 0,
+    overflow: "hidden",
   },
   chatBox: { border: "1px solid rgba(240,221,154,.16)", background: "rgba(31,75,64,.86)", borderRadius: 24, padding: 12 },
   inputRow: { display: "flex", gap: 8 },
@@ -760,21 +788,22 @@ const styles = {
   insightGrid: { display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" },
   insightCard: { border: "1px solid", borderRadius: 24, padding: 16, background: "rgba(44,103,88,.34)" },
   insightFooter: { display: "flex", alignItems: "end", justifyContent: "space-between", gap: 12, marginTop: 8 },
-  categoryList: { display: "grid", gap: 12, marginTop: 16 },
+  categoryList: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 16 }
   categoryButton: {
     border: "1px solid rgba(240,221,154,.16)",
     background: "rgba(31,75,64,.72)",
     color: BRAND.cream,
-    borderRadius: 22,
-    padding: 14,
+    borderRadius: 20,
+    padding: 12,
     cursor: "pointer",
     textAlign: "left",
-  },
+    minWidth: 0,
+  }
   categoryButtonActive: {
     border: "1px solid rgba(240,221,154,.45)",
     background: "rgba(198,161,91,.16)",
   },
-  categoryTopLine: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 9 },
+  categoryTopLine: { display: "grid", gap: 6, alignItems: "center", marginBottom: 9 }
   categorySmall: { color: BRAND.mutedGold, display: "block", marginTop: 8 },
   barTrack: { height: 12, background: "rgba(18,53,46,.86)", borderRadius: 999, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999 },
