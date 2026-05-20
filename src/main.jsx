@@ -20,6 +20,18 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
+const ALL_CATEGORIES = [
+  "Despesa doméstica",
+  "Alimentação",
+  "Transporte",
+  "Saúde",
+  "Educação",
+  "Lazer",
+  "Profissional",
+  "Pessoal",
+  "Outros",
+];
+
 const categoryRules = [
   {
     name: "Saúde",
@@ -55,10 +67,12 @@ const categoryRules = [
   },
 ];
 
-function guessCategory(text) {
-  const income = isIncome(text);
-  if (income) return "Receita";
+function isIncome(text) {
+  return /recebi|ganhei|salário|salario|pix recebido|pagamento|cliente pagou|vendi|entrada/i.test(text);
+}
 
+function guessCategory(text) {
+  if (isIncome(text)) return "Receita";
   const found = categoryRules.find((category) => category.words.test(text));
   return found ? found.name : "Outros";
 }
@@ -67,10 +81,6 @@ function extractAmount(text) {
   const normalized = text.toLowerCase().replace(",", ".");
   const match = normalized.match(/(\d+(?:\.\d{1,2})?)/);
   return match ? Number(match[1]) : 0;
-}
-
-function isIncome(text) {
-  return /recebi|ganhei|salário|salario|pix recebido|pagamento|cliente pagou|vendi|entrada/i.test(text);
 }
 
 function cleanDescription(text) {
@@ -137,45 +147,27 @@ function OrganizemeApp() {
         return acc;
       }, {});
 
-    const categories = Object.entries(categoryTotals)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        count: entries.filter((entry) => entry.type === "expense" && entry.category === category).length,
-      }))
-      .sort((a, b) => b.amount - a.amount);
+    const categories = ALL_CATEGORIES.map((category) => {
+      const amount = categoryTotals[category] || 0;
+      const count = entries.filter((entry) => entry.type === "expense" && entry.category === category).length;
+      return { category, amount, count };
+    });
+
+    const usedCategories = categories.filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount);
 
     return {
       income,
       expense,
       balance: income - expense,
       categories,
-      biggest: categories[0] || null,
-      smallest: categories[categories.length - 1] || null,
+      usedCategories,
+      biggest: usedCategories[0] || null,
+      smallest: usedCategories[usedCategories.length - 1] || null,
     };
   }, [entries]);
 
-  const allCategoryNames = [
-    "Despesa doméstica",
-    "Alimentação",
-    "Transporte",
-    "Saúde",
-    "Educação",
-    "Lazer",
-    "Profissional",
-    "Pessoal",
-    "Outros",
-  ];
-
-  const categoryDashboard = allCategoryNames.map((category) => {
-    const found = summary.categories.find((item) => item.category === category);
-    return found || { category, amount: 0, count: 0 };
-  });
-
-  const activeCategory = selectedCategory || summary.categories[0]?.category || null;
-  const categoryEntries = entries.filter(
-    (entry) => entry.type === "expense" && entry.category === activeCategory
-  );
+  const activeCategory = selectedCategory || summary.usedCategories[0]?.category || "Despesa doméstica";
+  const categoryEntries = entries.filter((entry) => entry.type === "expense" && entry.category === activeCategory);
   const activeCategoryTotal = categoryEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const maxCategoryAmount = Math.max(...summary.categories.map((item) => item.amount), 1);
 
@@ -292,7 +284,7 @@ function OrganizemeApp() {
           <div style={styles.homePreviewCard}>
             <p style={styles.homePreviewText}>“Gastei 120 reais no mercado”</p>
             <div style={styles.chipsRow}>
-              <span style={styles.chipGold}>Despesa doméstica</span>
+              <span style={styles.chipGold}>Alimentação</span>
               <span style={styles.chipRed}>-R$ 120,00</span>
             </div>
           </div>
@@ -308,7 +300,6 @@ function OrganizemeApp() {
   return (
     <main style={styles.page}>
       <BackgroundGlow />
-
       <section style={styles.shell}>
         <header style={styles.header}>
           <div style={styles.brandWrap}>
@@ -322,16 +313,15 @@ function OrganizemeApp() {
         </header>
 
         <section style={styles.dashboardCard}>
-          <p style={styles.goldText}>Resumo de {getCurrentMonthLabel()}</p>
-          <div style={styles.balanceRow}>
-            <div>
-              <span style={styles.balanceLabel}>Total gasto no mês</span>
-              <h2 style={styles.mainNumber}>{money.format(summary.expense)}</h2>
-            </div>
+          <div style={styles.dashboardTopLine}>
+            <p style={styles.goldText}>Resumo de {getCurrentMonthLabel()}</p>
             <button style={styles.smallPremiumButton} onClick={() => setShowHome(true)}>
               Início
             </button>
           </div>
+
+          <span style={styles.balanceLabel}>Total gasto no mês</span>
+          <h2 style={styles.mainNumber}>{money.format(summary.expense)}</h2>
 
           <div style={styles.metricsGridThree}>
             <MetricCard label="Recebido" value={money.format(summary.income)} tone="green" />
@@ -424,32 +414,14 @@ function OrganizemeApp() {
             <div style={styles.card}>
               <div style={styles.cardHeader}>
                 <div>
-                  <h3 style={styles.cardTitle}>Dashboard por categoria</h3>
-                  <p style={styles.smallText}>Clique em uma categoria para ver tudo que foi gasto.</p>
+                  <h3 style={styles.cardTitle}>Categorias</h3>
+                  <p style={styles.smallText}>Clique em uma categoria para ver todos os detalhes.</p>
                 </div>
                 <span style={styles.icon}>📊</span>
               </div>
 
-              <div style={styles.insightGrid}>
-                <InsightCard
-                  title="Maior despesa"
-                  value={summary.biggest?.category || "Sem dados"}
-                  amount={summary.biggest ? money.format(summary.biggest.amount) : money.format(0)}
-                  danger
-                />
-                <InsightCard
-                  title="Categoria mais controlada"
-                  value={summary.smallest?.category || "Sem dados"}
-                  amount={summary.smallest ? money.format(summary.smallest.amount) : money.format(0)}
-                />
-              </div>
-
               <div style={styles.categoryList}>
-                {entries.length === 0 && (
-                  <div style={styles.emptyState}>As categorias aparecerão aqui. Toque em uma categoria para ver os detalhes.</div>
-                )}
-
-                {categoryDashboard.map((item) => {
+                {summary.categories.map((item) => {
                   const percent = item.amount > 0 ? Math.max((item.amount / maxCategoryAmount) * 100, 7) : 0;
                   const isActive = activeCategory === item.category;
                   const barColor = percent > 75 ? BRAND.red : percent > 45 ? BRAND.gold : BRAND.success;
@@ -477,7 +449,7 @@ function OrganizemeApp() {
             <div style={styles.card}>
               <div style={styles.cardHeader}>
                 <div>
-                  <h3 style={styles.cardTitle}>{activeCategory || "Detalhes da categoria"}</h3>
+                  <h3 style={styles.cardTitle}>{activeCategory}</h3>
                   <p style={styles.smallText}>Veja data, descrição, valor e edite quando precisar.</p>
                 </div>
                 <span style={styles.totalPill}>{money.format(activeCategoryTotal)}</span>
@@ -512,7 +484,7 @@ function OrganizemeApp() {
                   : "Comece lançando seu primeiro gasto."}
               </h3>
               <p style={styles.smallText}>
-                Tudo que você registrar será somado automaticamente no dashboard principal e separado por categoria.
+                Gasolina vai para Transporte, farmácia vai para Saúde e mercado vai para Alimentação. Tudo é somado automaticamente no dashboard.
               </p>
             </div>
           </section>
@@ -537,19 +509,7 @@ function MetricCard({ label, value, tone }) {
   return (
     <div style={styles.metricCard}>
       <p style={styles.smallText}>{label}</p>
-      <strong style={{ color: toneColor, fontSize: 22 }}>{value}</strong>
-    </div>
-  );
-}
-
-function InsightCard({ title, value, amount, danger }) {
-  return (
-    <div style={{ ...styles.insightCard, borderColor: danger ? "rgba(185,85,76,.45)" : "rgba(117,197,138,.45)" }}>
-      <p style={styles.smallText}>{title}</p>
-      <div style={styles.insightFooter}>
-        <strong>{value}</strong>
-        <span style={{ color: danger ? "#ffd1cd" : "#b9f5c6" }}>{amount}</span>
-      </div>
+      <strong style={{ color: toneColor, fontSize: 18, display: "block", whiteSpace: "nowrap" }}>{value}</strong>
     </div>
   );
 }
@@ -610,30 +570,31 @@ const styles = {
   },
   glowOne: {
     position: "fixed",
-    width: 460,
-    height: 460,
+    width: 420,
+    height: 420,
     borderRadius: "50%",
-    background: "rgba(44,103,88,.48)",
+    background: "rgba(44,103,88,.45)",
     filter: "blur(90px)",
     top: -120,
     left: "35%",
   },
   glowTwo: {
     position: "fixed",
-    width: 420,
-    height: 420,
+    width: 380,
+    height: 380,
     borderRadius: "50%",
-    background: "rgba(198,161,91,.18)",
+    background: "rgba(198,161,91,.16)",
     filter: "blur(90px)",
     bottom: -120,
     right: -80,
   },
-  shell: { position: "relative", maxWidth: 1160, margin: "0 auto", padding: "14px", boxSizing: "border-box" }
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 12 },
-  brandWrap: { display: "flex", alignItems: "center", gap: 12 },
+  shell: { position: "relative", maxWidth: 1160, margin: "0 auto", padding: 14, boxSizing: "border-box" },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12 },
+  brandWrap: { display: "flex", alignItems: "center", gap: 12, minWidth: 0 },
   logo: {
     width: 52,
     height: 52,
+    minWidth: 52,
     borderRadius: 18,
     display: "grid",
     placeItems: "center",
@@ -648,51 +609,52 @@ const styles = {
     border: "1px solid rgba(240,221,154,.25)",
     background: "rgba(24,61,53,.85)",
     borderRadius: 999,
-    padding: "9px 13px",
+    padding: "8px 11px",
     color: BRAND.cream,
-    fontSize: 13,
+    fontSize: 12,
+    whiteSpace: "nowrap",
   },
   dashboardCard: {
     border: "1px solid rgba(240,221,154,.22)",
     borderRadius: 28,
     background: `linear-gradient(135deg, ${BRAND.softGreen}, ${BRAND.mainGreen}, ${BRAND.cardGreen})`,
-    padding: 18,
+    padding: 16,
     boxShadow: "0 28px 80px rgba(0,0,0,.18)",
-    marginBottom: 18,
+    marginBottom: 16,
     overflow: "hidden",
   },
-  balanceRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginTop: 12 },
+  dashboardTopLine: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 },
   balanceLabel: { color: BRAND.mutedGold, fontSize: 13 },
-  mainNumber: { fontSize: "clamp(42px, 13vw, 64px)", lineHeight: 1, margin: "8px 0 0", color: BRAND.cream, letterSpacing: -1.5 }
+  mainNumber: { fontSize: "clamp(40px, 13vw, 62px)", lineHeight: 1, margin: "8px 0 0", color: BRAND.cream, letterSpacing: -1.5 },
   smallPremiumButton: {
     border: "1px solid rgba(240,221,154,.3)",
     background: "rgba(18,53,46,.38)",
     color: BRAND.lightGold,
     borderRadius: 999,
-    padding: "9px 13px",
+    padding: "8px 12px",
     cursor: "pointer",
   },
-  metricsGridThree: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 20 },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }
-  leftColumn: { display: "grid", gap: 20, alignContent: "start" },
-  rightColumn: { display: "grid", gap: 20, alignContent: "start" },
+  metricsGridThree: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 18 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 },
+  leftColumn: { display: "grid", gap: 16, alignContent: "start" },
+  rightColumn: { display: "grid", gap: 16, alignContent: "start" },
   card: {
     border: "1px solid rgba(240,221,154,.17)",
     background: "rgba(24,61,53,.96)",
-    borderRadius: 32,
-    padding: 20,
+    borderRadius: 28,
+    padding: 16,
     boxShadow: "0 28px 80px rgba(0,0,0,.16)",
   },
   cardHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 },
   cardTitle: { margin: 0, color: BRAND.cream, fontSize: 19 },
   icon: { fontSize: 22 },
   goldText: { color: BRAND.lightGold, margin: 0, fontSize: 14 },
-  smallText: { margin: 0, color: BRAND.mutedGold, fontSize: 13, lineHeight: 1.5 },
+  smallText: { margin: 0, color: BRAND.mutedGold, fontSize: 13, lineHeight: 1.45 },
   metricCard: {
     border: "1px solid rgba(240,221,154,.17)",
     background: "rgba(24,61,53,.72)",
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 18,
+    padding: 10,
     minWidth: 0,
     overflow: "hidden",
   },
@@ -712,6 +674,7 @@ const styles = {
   },
   sendButton: {
     width: 52,
+    minWidth: 52,
     border: "none",
     borderRadius: 18,
     background: BRAND.gold,
@@ -785,10 +748,7 @@ const styles = {
     padding: "7px 12px",
     cursor: "pointer",
   },
-  insightGrid: { display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" },
-  insightCard: { border: "1px solid", borderRadius: 24, padding: 16, background: "rgba(44,103,88,.34)" },
-  insightFooter: { display: "flex", alignItems: "end", justifyContent: "space-between", gap: 12, marginTop: 8 },
-  categoryList: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 16 }
+  categoryList: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 16 },
   categoryButton: {
     border: "1px solid rgba(240,221,154,.16)",
     background: "rgba(31,75,64,.72)",
@@ -798,12 +758,12 @@ const styles = {
     cursor: "pointer",
     textAlign: "left",
     minWidth: 0,
-  }
+  },
   categoryButtonActive: {
     border: "1px solid rgba(240,221,154,.45)",
     background: "rgba(198,161,91,.16)",
   },
-  categoryTopLine: { display: "grid", gap: 6, alignItems: "center", marginBottom: 9 }
+  categoryTopLine: { display: "grid", gap: 6, alignItems: "center", marginBottom: 9 },
   categorySmall: { color: BRAND.mutedGold, display: "block", marginTop: 8 },
   barTrack: { height: 12, background: "rgba(18,53,46,.86)", borderRadius: 999, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999 },
@@ -830,7 +790,7 @@ const styles = {
     fontSize: 11,
     cursor: "pointer",
   },
-  totalPill: { borderRadius: 999, background: "rgba(198,161,91,.18)", color: BRAND.lightGold, padding: "7px 11px", fontSize: 13 },
+  totalPill: { borderRadius: 999, background: "rgba(198,161,91,.18)", color: BRAND.lightGold, padding: "7px 11px", fontSize: 13, whiteSpace: "nowrap" },
   emptyState: {
     border: "1px dashed rgba(240,221,154,.25)",
     borderRadius: 20,
@@ -841,11 +801,11 @@ const styles = {
   },
   assistantCard: {
     border: "1px solid rgba(240,221,154,.22)",
-    borderRadius: 32,
+    borderRadius: 28,
     background: `linear-gradient(135deg, ${BRAND.softGreen}, ${BRAND.cardGreen})`,
-    padding: 20,
+    padding: 18,
   },
-  assistantTitle: { margin: "8px 0", color: BRAND.cream, fontSize: 24 },
+  assistantTitle: { margin: "8px 0", color: BRAND.cream, fontSize: 23 },
   homeScreen: {
     minHeight: "100vh",
     maxWidth: 520,
